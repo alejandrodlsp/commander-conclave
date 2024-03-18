@@ -1,0 +1,23 @@
+{
+  "development": {
+      "username": "postgres",
+      "password": "cerebrito",
+      "database": "commander-conclave",
+      "host": "localhost",
+      "dialect": "postgres"
+  },
+  "test": {
+      "username": "postgres",
+      "password": "cerebrito",
+      "database": "commander-conclave",
+      "host": "localhost",
+      "dialect": "postgres"
+  },
+  "production": {
+      "username": "postgres",
+      "password": "cerebrito",
+      "database": "commander-conclave",
+      "host": "localhost",
+      "dialect": "postgres"
+  }
+}
