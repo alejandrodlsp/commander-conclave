@@ -1,4 +1,5 @@
 module.exports = app => {
-    require("./login.routes")(app)
+    require("./auth.routes")(app)
     require("./tutorial.routes")(app)
+    require("./room.routes")(app)
 }

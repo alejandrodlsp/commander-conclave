@@ -5,14 +5,9 @@ module.exports = {
   async up (queryInterface, Sequelize) {
     queryInterface.sequelize.transaction(async transaction => {
       await Promise.all([
-        queryInterface.changeColumn('Users', 'username', {
-            type: Sequelize.STRING,
-            allowNull: false,
-            unique: true
-        }, { transaction }),
-        queryInterface.addColumn('Users', 'password_hash', {
-          type: Sequelize.STRING,
-          allowNull: false,
+        queryInterface.addColumn('Users', 'jwt_valid_from', {
+          type: Sequelize.DATE,
+          allowNull: true
         }, { transaction })
       ])
     })
