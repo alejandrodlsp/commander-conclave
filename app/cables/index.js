@@ -4,6 +4,11 @@ const jwt = require("jsonwebtoken")
 const http = require('http');
 const server = http.createServer();
 
+const db = require("../../models")
+const Room = db.Room
+const RoomUser = db.RoomUser
+const User = db.RoomUser
+
 const io = new Server(server, {
     cors: {
         origin: 'http://localhost:8080',
@@ -81,16 +86,43 @@ const onRoomMessage = (socket, room, msg) => {
 }
 
 const onLeaveRoom = (socket, room) => {
-    socket.leave(room)
+    RoomUser.destroy({ 
+        where: {
+            room_id: room,
+            user_id: socket.request.user.id
+        }
+    }).then(() => {
+        socket.removeAllListeners('TS_CHAT_MESSAGE', onRoomMessage)
+        socket.removeAllListeners('TS_LEAVE_ROOM', onLeaveRoom)
 
-    // Clear room listeners
-    socket.removeAllListeners('TS_CHAT_MESSAGE', onRoomMessage)
-    socket.removeAllListeners('TS_LEAVE_ROOM', onLeaveRoom)
-
-    socket.to(room).emit("TC_USER_LEFT_ROOM", socket.request.user)
+        socket.leave(room)
+        socket.to(room).emit("TC_USER_LEFT_ROOM", socket.request.user)
+    })
+    syncRoom(room)
 }
 
-const onJoinRoom = (socket, room) => {
+const syncRoom = async (roomId) => {
+    try {
+        db.sequelize.query(
+            `SELECT u.id, u.username
+            FROM "Users" u
+            INNER JOIN "RoomUsers" ru ON u."id" = ru."user_id"
+            WHERE ru."room_id" = '${roomId}'`,
+            {
+                model: User,
+                mapToModel: true
+            }
+        ).then((users) => {
+            io.to(roomId).emit("TC_SYNC_ROOM", {
+                users: users
+            })
+        })
+    } catch (error) {
+        console.error('Error syncing room:', error);
+    }
+};
+
+const onJoinRoom = async (socket, room) => {
     // Check last room, and leave if it exists
     if (socket.currentRoom) {
         socket.leave(socket.currentRoom);
@@ -99,17 +131,33 @@ const onJoinRoom = (socket, room) => {
     socket.join(room);
     socket.currentRoom = room;
 
+    await RoomUser.findOne({ 
+        where: { 
+            room_id: room, 
+            user_id: socket.request.user.id 
+        } 
+    }).then(async (user) => {
+        if (!user) {
+            await RoomUser.create({
+                room_id: room,
+                user_id: socket.request.user.id
+            })
+        }
+
+        // Emit user joined room messages
+        socket.to(room).emit("TC_USER_JOINED_ROOM", socket.request.user)
+        // Sync room state
+        syncRoom(room)
+    })
+
     // Register room listeners
     socket.on('TS_CHAT_MESSAGE', (msg) => {
         onRoomMessage(socket, room, msg);
     });
 
-    socket.on('TS_LEAVE_ROOM', () => {
+    socket.on('disconnect', () => {
         onLeaveRoom(socket, room);
     });
-    
-    // Emit user joined room messages
-    socket.to(room).emit("TC_USER_JOINED_ROOM", socket.request.user)
 }
 
 
