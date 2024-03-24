@@ -1,6 +1,8 @@
 const db = require("../../models")
 const Room = db.Room
 
+const { getCurrentRoom } = require("../helpers/room.helper")
+
 exports.index = (req, res) => {
     Room.findAll()
         .then(data => {
@@ -9,6 +11,15 @@ exports.index = (req, res) => {
         .catch(err => {
             res.status(500).send({ message: err.message || "Some error occurred while retrieving rooms."})
         });
+}
+
+exports.currentRoom = (req, res) => {
+    getCurrentRoom(req.user.id).then((room) => {
+        console.log(room)
+        res.send(room)
+    }).catch((err) => {
+        res.status(500).send({ message: err.message || "Some error occurred while retrieving rooms."})
+    });
 }
 
 exports.createRoom = (req, res) => {

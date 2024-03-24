@@ -5,13 +5,14 @@ const http = require('http');
 const server = http.createServer();
 
 const db = require("../../models")
-const Room = db.Room
 const RoomUser = db.RoomUser
 const User = db.RoomUser
 
+const { getRoomUsers } = require('../helpers/room.helper')
+
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:8080',
+        origin: 'http://localhost:8081',
         allowedHeaders: ['authorization'],
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     },
@@ -85,47 +86,40 @@ const onRoomMessage = (socket, room, msg) => {
     socket.to(room).emit("TC_CHAT_MESSAGE", messageData)
 }
 
-const onLeaveRoom = (socket, room) => {
-    RoomUser.destroy({ 
-        where: {
-            room_id: room,
-            user_id: socket.request.user.id
-        }
-    }).then(() => {
-        socket.removeAllListeners('TS_CHAT_MESSAGE', onRoomMessage)
-        socket.removeAllListeners('TS_LEAVE_ROOM', onLeaveRoom)
+const onLeaveRoom = async (socket, room) => {
+    return new Promise((resolve, reject) => {
+        RoomUser.destroy({ 
+            where: {
+                room_id: room,
+                user_id: socket.request.user.id
+            }
+        }).then(() => {
+            socket.removeAllListeners('TS_CHAT_MESSAGE', onRoomMessage)
+            socket.removeAllListeners('TS_LEAVE_ROOM', onLeaveRoom)
 
-        socket.leave(room)
-        socket.to(room).emit("TC_USER_LEFT_ROOM", socket.request.user)
+            socket.leave(room)
+            socket.to(room).emit("TC_USER_LEFT_ROOM", socket.request.user)
+
+            syncRoom(room)
+            resolve()
+        }).catch(err => reject(err))
     })
-    syncRoom(room)
 }
 
 const syncRoom = async (roomId) => {
-    try {
-        db.sequelize.query(
-            `SELECT u.id, u.username
-            FROM "Users" u
-            INNER JOIN "RoomUsers" ru ON u."id" = ru."user_id"
-            WHERE ru."room_id" = '${roomId}'`,
-            {
-                model: User,
-                mapToModel: true
-            }
-        ).then((users) => {
-            io.to(roomId).emit("TC_SYNC_ROOM", {
-                users: users
-            })
+    getRoomUsers(roomId).then(users => {
+        io.to(roomId).emit("TC_SYNC_ROOM", {
+            users: users
         })
-    } catch (error) {
-        console.error('Error syncing room:', error);
-    }
+    }).catch((err) => {
+        console.error('Error syncing room:', err);
+    })
 };
 
 const onJoinRoom = async (socket, room) => {
     // Check last room, and leave if it exists
     if (socket.currentRoom) {
-        socket.leave(socket.currentRoom);
+        await onLeaveRoom(socket, socket.currentRoom);
         socket.currentRoom = null;
     }
     socket.join(room);
