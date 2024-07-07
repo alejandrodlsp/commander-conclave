@@ -8,7 +8,7 @@ const cors = require("cors")
 const app = express()
 
 const corsOptions = {
-    origin: "http://localhost:8081",
+    origin: "http://localhost:8080",
     credentials:true,
     optionSuccessStatus:200
 }
@@ -24,6 +24,7 @@ db.sequelize.sync().then(() => {
 
 require("./app/routes")(app)
 require('./app/cables')
+require('./app/mongodb')
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {

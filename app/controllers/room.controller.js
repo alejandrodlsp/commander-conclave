@@ -1,15 +1,29 @@
 const db = require("../../models")
 const Room = db.Room
 
-const { getCurrentRoom } = require("../helpers/room.helper")
+const { getCurrentRoom, getRoomUsers } = require("../helpers/room.helper")
 
 exports.index = (req, res) => {
     Room.findAll()
+        .then(rooms => {
+            const roomPromises = rooms.map(room => {
+                return getRoomUsers(room.id).then(users => {
+                    const canJoin = room.acceptNewPlayer(users)
+                    console.log(canJoin)
+                    return {
+                        ...room.toJSON(),
+                        roomUsers: users,
+                        canJoin
+                    };
+                });
+            });
+            return Promise.all(roomPromises);
+        })
         .then(data => {
-            res.send(data)
+            res.send(data);
         })
         .catch(err => {
-            res.status(500).send({ message: err.message || "Some error occurred while retrieving rooms."})
+            res.status(500).send({ message: err.message || "Some error occurred while retrieving rooms." });
         });
 }
 

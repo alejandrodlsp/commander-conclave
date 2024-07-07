@@ -4,15 +4,11 @@ const jwt = require("jsonwebtoken")
 const http = require('http');
 const server = http.createServer();
 
-const db = require("../../models")
-const RoomUser = db.RoomUser
-const User = db.RoomUser
-
-const { getRoomUsers } = require('../helpers/room.helper')
+const roomCable = require('./room.cable.js')
 
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:8081',
+        origin: 'http://localhost:8080',
         allowedHeaders: ['authorization'],
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     },
@@ -53,107 +49,20 @@ io.on('connection', (socket) => {
         onDisconnect(socket)
     });
 
-    socket.on('TS_JOIN_ROOM', (room) => {
-        onJoinRoom(socket, room)
+    socket.on('TS_ATTEMPT_JOIN_ROOM', (room) => {
+        roomCable.attemptJoinRoom(io, socket, room)
     })
 });
 
 const onConnect = (socket) => {
     const userId = socket.request.user.id;
     socket.join(`user:${userId}`);    
-
-    socket.emit("TC_USER_CONNECTED", userId)
 }
 
 const onDisconnect = (socket) => {
     const userId = socket.request.user.id;
-
-    socket.emit("TC_USER_DISCONNECTED", userId)
-    socket.leave(`user:${userId}`);
+    socket.leave(`user:${userId}`);   
 }
-
-const onRoomMessage = (socket, room, msg) => {
-    const user = socket.request.user
-    const userData = {
-        id: user.id,
-        username: user.username
-    }
-    const messageData = {
-        user: userData,
-        message: msg,
-        time: new Date().toLocaleTimeString()
-    }
-    socket.to(room).emit("TC_CHAT_MESSAGE", messageData)
-}
-
-const onLeaveRoom = async (socket, room) => {
-    return new Promise((resolve, reject) => {
-        RoomUser.destroy({ 
-            where: {
-                room_id: room,
-                user_id: socket.request.user.id
-            }
-        }).then(() => {
-            socket.removeAllListeners('TS_CHAT_MESSAGE', onRoomMessage)
-            socket.removeAllListeners('TS_LEAVE_ROOM', onLeaveRoom)
-
-            socket.leave(room)
-            socket.to(room).emit("TC_USER_LEFT_ROOM", socket.request.user)
-
-            syncRoom(room)
-            resolve()
-        }).catch(err => reject(err))
-    })
-}
-
-const syncRoom = async (roomId) => {
-    getRoomUsers(roomId).then(users => {
-        io.to(roomId).emit("TC_SYNC_ROOM", {
-            users: users
-        })
-    }).catch((err) => {
-        console.error('Error syncing room:', err);
-    })
-};
-
-const onJoinRoom = async (socket, room) => {
-    // Check last room, and leave if it exists
-    if (socket.currentRoom) {
-        await onLeaveRoom(socket, socket.currentRoom);
-        socket.currentRoom = null;
-    }
-    socket.join(room);
-    socket.currentRoom = room;
-
-    await RoomUser.findOne({ 
-        where: { 
-            room_id: room, 
-            user_id: socket.request.user.id 
-        } 
-    }).then(async (user) => {
-        if (!user) {
-            await RoomUser.create({
-                room_id: room,
-                user_id: socket.request.user.id
-            })
-        }
-
-        // Emit user joined room messages
-        socket.to(room).emit("TC_USER_JOINED_ROOM", socket.request.user)
-        // Sync room state
-        syncRoom(room)
-    })
-
-    // Register room listeners
-    socket.on('TS_CHAT_MESSAGE', (msg) => {
-        onRoomMessage(socket, room, msg);
-    });
-
-    socket.on('disconnect', () => {
-        onLeaveRoom(socket, room);
-    });
-}
-
 
 server.listen(3001, () => {
     console.log("Socket is running")

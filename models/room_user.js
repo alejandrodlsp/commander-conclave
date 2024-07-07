@@ -21,10 +21,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
       unique: true
+    },
+    deck_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     }
   }, {
     sequelize,
     modelName: 'RoomUser',
   });
+  
   return RoomUser;
 };
